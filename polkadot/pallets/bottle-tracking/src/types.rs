@@ -42,3 +42,14 @@ impl<AccountId, Moment> Shipment<AccountId, Moment> {
         self
     }
 }
+
+
+impl From<ShipmentOperation> for BottleStatus {
+    fn from(op: ShipmentOperation) -> Self {
+        match op {
+            ShipmentOperation::Pickup => BottleStatus::ShipmentInTransit,
+            ShipmentOperation::Scan => BottleStatus::ShipmentInTransit,
+            ShipmentOperation::Deliver => BottleStatus::ShipmentDelivered,
+        }
+    }
+}

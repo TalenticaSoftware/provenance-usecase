@@ -69,6 +69,9 @@ decl_error! {
 		ShipmentHasBeenDelivered,
 		ShipmentInTransit,
 		NotShipmentCarrier,
+		BottleNotShipped,
+		ShipmentPending,
+		NotBottleOwner,
 	}
 }
 
@@ -169,6 +172,27 @@ decl_module! {
 			Ok(())
 		}
 
+		#[weight = 10_000 + T::DbWeight::get().writes(1)]
+		pub fn sell_to_customer(
+			origin,
+			customer: T::AccountId,
+			bottles: Vec<BottleId>,
+		) -> dispatch::DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			registrar::Module::<T>::validate_retailer(&who)?;
+
+			registrar::Module::<T>::validate_customer(&customer)?;
+
+			for bottle in &bottles {
+				Self::validate_bottle_owner(bottle, &who)?;
+			}
+
+			// registrar::Module::<T>::update_bottle_owner(origin, who)?;
+
+			Ok(())
+		}
+
 	}
 }
 
@@ -214,4 +238,25 @@ impl<T: Config> Module<T> {
 
         Ok(())
     }
+
+
+	pub fn validate_bottle_owner(bottle_id: &BottleId, account: &T::AccountId) -> dispatch::DispatchResult {
+		
+		registrar::Module::<T>::check_bottle_id_present(bottle_id)?;
+		
+		let shipment_id: ShipmentId = match BottleOfShipment::get(bottle_id) {
+			None => Err(Error::<T>::BottleNotShipped),
+			Some(sp) => Ok(sp),
+		}?;
+
+		match Shipments::<T>::get(&shipment_id) {
+			None => Err(Error::<T>::ShipmentDoesNotExist)?,
+			Some(sp) => match sp.status {
+				ShipmentStatus::Pending => Err(Error::<T>::ShipmentPending)?,
+				ShipmentStatus::InTransit => Err(Error::<T>::ShipmentInTransit)?,
+				ShipmentStatus::Delivered if sp.retailer == *account => Ok(()),
+				_ => Err(Error::<T>::NotBottleOwner)?,
+			}
+		}
+	}
 }

@@ -44,7 +44,7 @@ pub type BottleId = Vec<u8>;
 #[derive(Debug, PartialEq, Encode, Decode)]
 pub struct Bottle<AccountId, Moment> {
 	id: BottleId,
-	manufacturer: AccountId,
+	owner: AccountId,
 	status: BottleStatus,
 	registered: Moment,
 }
@@ -68,7 +68,7 @@ decl_storage! {
 		
 		pub Bottles get(fn bottle_by_id): map hasher(blake2_128_concat) BottleId => Option<Bottle<T::AccountId, T::Moment>>;
 		pub BottlesOfManufacturer get(fn bottles_of_manufacturer): map hasher(blake2_128_concat) T::AccountId => Vec<BottleId>;
-		pub OwnerOf get(fn owner_of): map hasher(blake2_128_concat) BottleId => Option<T::AccountId>;
+		pub ManufacturerOf get(fn owner_of): map hasher(blake2_128_concat) BottleId => Option<T::AccountId>;
 	}
 }
 
@@ -197,10 +197,17 @@ decl_module! {
 
 			Bottles::<T>::insert(&id, new_bottle);
 			BottlesOfManufacturer::<T>::append(&who, &id);
-			OwnerOf::<T>::insert(&id, &who);
+			ManufacturerOf::<T>::insert(&id, &who);
 
 			Self::deposit_event(Event::<T>::BottleRegistered(who, id));
 
+			Ok(())
+		}
+
+		#[weight = 10_000 + T::DbWeight::get().reads_writes(1,1)]
+		fn update_bottle_owner(origin, new_owner: T::AccountId) -> dispatch::DispatchResult {
+			let who = ensure_signed(origin)?;
+	
 			Ok(())
 		}
 	}
@@ -208,7 +215,7 @@ decl_module! {
 }
 
 impl<T: Config> Module<T> {
-	pub fn add_member(member_type: MemberType, account_id: &T::AccountId) -> dispatch::DispatchResult {
+	fn add_member(member_type: MemberType, account_id: &T::AccountId) -> dispatch::DispatchResult {
 		let member_itr = Members::<T>::iter();
 
 		for mem in member_itr {
@@ -248,7 +255,7 @@ impl<T: Config> Module<T> {
 	}
 
 	pub fn validate_customer(account_id: &T::AccountId) -> dispatch::DispatchResult {
-		let all_customers = <Module<T>>::members(MemberType::Customer);
+		let all_customers = Module::<T>::members(MemberType::Customer);
 
 		ensure!(all_customers.contains(account_id), Error::<T>::NotManufacturer);
 
@@ -264,7 +271,7 @@ impl<T: Config> Module<T> {
 	}
 
 	pub fn check_bottle_manufacturer(id: &[u8], account: &T::AccountId) -> dispatch::DispatchResult {
-		ensure!(<OwnerOf::<T>>::get(id) == Some(account.clone()), Error::<T>::NotBottleManufacturer);
+		ensure!(<ManufacturerOf::<T>>::get(id) == Some(account.clone()), Error::<T>::NotBottleManufacturer);
 
 		Ok(())
 	}
@@ -297,7 +304,7 @@ where
     Moment: Default,
 {
     id: BottleId,
-    manufacturer: AccountId,
+    owner: AccountId,
 	status: BottleStatus,
     registered: Moment,
 }
@@ -313,7 +320,7 @@ where
     }
 
     pub fn manufactured_by(mut self, manufacturer: AccountId) -> Self {
-        self.manufacturer = manufacturer;
+        self.owner = manufacturer;
         self
     }
 
@@ -325,7 +332,7 @@ where
     pub fn build(self) -> Bottle<AccountId, Moment> {
         Bottle::<AccountId, Moment> {
             id: self.id,
-            manufacturer: self.manufacturer,
+            owner: self.owner,
             registered: self.registered,
 			status: BottleStatus::Manufactured,
         }
