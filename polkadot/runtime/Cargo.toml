@@ -182,6 +182,12 @@ package = 'bottle-tracking'
 path = '../pallets/bottle-tracking'
 version = '2.0.0'
 
+# [dependencies.chainbridge]
+# default-features = false
+# path = '../pallets/chainbridge'
+# package = 'chainbridge'
+# version = '0.0.2'
+
 
 # Cumulus dependencies
 [dependencies.parachain-info]
@@ -275,4 +281,7 @@ std = [
 	"xcm-handler/std",
 	"registrar/std",
 	"bottle-tracking/std",
+
 ]
+
+# 	'chainbridge/std',

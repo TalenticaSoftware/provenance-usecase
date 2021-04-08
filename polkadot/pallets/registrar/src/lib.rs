@@ -49,6 +49,13 @@ pub struct Bottle<AccountId, Moment> {
 	registered: Moment,
 }
 
+impl<AccountId, Moment> Bottle<AccountId, Moment> {
+	pub fn change_owner(mut self, new_owner: AccountId) -> Self {
+		self.owner = new_owner;
+		self
+	}
+}
+
 /// Configure the pallet by specifying the parameters and types on which it depends.
 pub trait Config: frame_system::Config + timestamp::Config {
 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
@@ -110,8 +117,10 @@ decl_error! {
 		NotCustomer,
 		/// Bottle does not exist.
 		BottleNotExist,
-		/// Not the botther manufacturer
-		NotBottleManufacturer
+		/// Not the bottle manufacturer
+		NotBottleManufacturer,
+		// Not the bottle owner
+		NotBottleOwner,		
 	}
 }
 
@@ -203,13 +212,6 @@ decl_module! {
 
 			Ok(())
 		}
-
-		#[weight = 10_000 + T::DbWeight::get().reads_writes(1,1)]
-		fn update_bottle_owner(origin, new_owner: T::AccountId) -> dispatch::DispatchResult {
-			let who = ensure_signed(origin)?;
-	
-			Ok(())
-		}
 	}
 
 }
@@ -270,11 +272,11 @@ impl<T: Config> Module<T> {
 		Ok(())
 	}
 
-	pub fn check_bottle_manufacturer(id: &[u8], account: &T::AccountId) -> dispatch::DispatchResult {
-		ensure!(<ManufacturerOf::<T>>::get(id) == Some(account.clone()), Error::<T>::NotBottleManufacturer);
+	// pub fn check_bottle_manufacturer(id: &[u8], account: &T::AccountId) -> dispatch::DispatchResult {
+	// 	ensure!(<ManufacturerOf::<T>>::get(id) == Some(account.clone()), Error::<T>::NotBottleManufacturer);
 
-		Ok(())
-	}
+	// 	Ok(())
+	// }
 
 	pub fn validate_bottle_id(id: &[u8]) -> dispatch::DispatchResult {
 		ensure!(!id.is_empty(), Error::<T>::BottleIdMissing);
@@ -294,6 +296,26 @@ impl<T: Config> Module<T> {
 	pub fn new_bottle() -> BottleBuilder<T::AccountId, T::Moment> {
         BottleBuilder::<T::AccountId, T::Moment>::default()
     }
+
+	pub fn update_bottle_owner(bottle_id: &BottleId, new_owner: T::AccountId) -> dispatch::DispatchResult {
+
+		let mut bottle: Bottle<T::AccountId, T::Moment> = match Bottles::<T>::get(bottle_id) {
+			None => Err(Error::<T>::BottleNotExist),
+			Some(bottle) => Ok(bottle),
+		}?;
+
+		bottle = bottle.change_owner(new_owner);
+
+		Bottles::<T>::insert(bottle_id, bottle);
+
+		Ok(())
+	}
+
+	pub fn check_bottle_owner(id: &[u8], owner: T::AccountId) -> dispatch::DispatchResult {
+		ensure!(<ManufacturerOf::<T>>::get(id) == Some(owner), Error::<T>::NotBottleOwner);
+
+		Ok(())
+	}
 }
 
 

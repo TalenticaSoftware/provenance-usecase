@@ -55,6 +55,8 @@ pub use registrar;
 /// Import the bottle-trackinig pallet.
 pub use bottle_tracking;
 
+// pub use chainbridge;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
@@ -346,6 +348,22 @@ impl bottle_tracking::Config for Runtime {
 	type Event = Event;
 }
 
+// impl chainbridge::Config for Runtime {
+// 	type Event = Event;
+// 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
+// 	type Proposal = Call;
+// 	type ChainId = ChainId;
+// 	type ProposalLifetime = ProposalLifetime;
+// }
+
+// parameter_types! {
+//     pub HashId: chainbridge::ResourceId = chainbridge::derive_resource_id(1, &blake2_128(b"hash"));
+//     // Note: Chain ID is 0 indicating this is native to another chain
+//     pub NativeTokenId: chainbridge::ResourceId = chainbridge::derive_resource_id(0, &blake2_128(b"DAV"));
+
+//     pub NFTTokenId: chainbridge::ResourceId = chainbridge::derive_resource_id(1, &blake2_128(b"NFT"));
+// }
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -364,6 +382,7 @@ construct_runtime!(
 		XcmHandler: xcm_handler::{Module, Event<T>, Origin},
 		RegistrarModule: registrar::{Module, Call, Storage, Event<T>},
 		BottleTracking: bottle_tracking::{Module, Call, Storage, Event<T>},
+		// ChainBridge: chainbridge::{Module, Call, Storage, Event<T>},
 	}
 );
 

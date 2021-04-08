@@ -53,6 +53,8 @@ decl_event!(
 		ShipmentRegistered(ShipmentId, AccountId),
 		/// Shipment status updated. [shipment_id, carrier, status]
 		ShipmentStatusUpdated(ShipmentId, AccountId, ShipmentStatus),
+		/// Bottles sold to customer. [customer]
+		BottlesSoldToCustomer(AccountId),
 	}
 );
 
@@ -120,6 +122,7 @@ decl_module! {
 
 			for bottle in &shipment.bottles {
 				BottleOfShipment::insert(&bottle, &id);
+				registrar::Module::<T>::update_bottle_owner(bottle, carrier.clone())?;
 			}
 
 			Shipments::<T>::insert(&id, shipment);
@@ -159,7 +162,15 @@ decl_module! {
 
 			shipment = match operation {
 				ShipmentOperation::Pickup => shipment.pickup(),
-				ShipmentOperation::Deliver => shipment.delivered(<timestamp::Module<T>>::now()),
+				ShipmentOperation::Deliver => {
+					shipment = shipment.delivered(<timestamp::Module<T>>::now());
+
+					for bottle in &shipment.bottles {
+						registrar::Module::<T>::update_bottle_owner(bottle, shipment.retailer.clone())?;
+					}
+
+					shipment
+				},
 				_ => shipment,
 			};
 
@@ -185,10 +196,15 @@ decl_module! {
 			registrar::Module::<T>::validate_customer(&customer)?;
 
 			for bottle in &bottles {
-				Self::validate_bottle_owner(bottle, &who)?;
+				// Self::validate_bottle_owner(bottle, &who)?;
+				registrar::Module::<T>::check_bottle_owner(bottle, who.clone())?;
 			}
 
-			// registrar::Module::<T>::update_bottle_owner(origin, who)?;
+			for bottle in &bottles {
+				registrar::Module::<T>::update_bottle_owner(bottle, customer.clone())?;
+			}
+
+			Self::deposit_event(RawEvent::BottlesSoldToCustomer(customer));
 
 			Ok(())
 		}
@@ -229,7 +245,7 @@ impl<T: Config> Module<T> {
 
 		for bottle in bottles {
 			registrar::Module::<T>::check_bottle_id_present(&bottle)?;
-			registrar::Module::<T>::check_bottle_manufacturer(&bottle, &manufacturer)?;
+			registrar::Module::<T>::check_bottle_owner(&bottle, manufacturer.clone())?;
 			ensure!(
 				!BottleOfShipment::contains_key(bottle.clone()), 
 				Error::<T>::BottleAlreadyShipped
@@ -240,23 +256,25 @@ impl<T: Config> Module<T> {
     }
 
 
-	pub fn validate_bottle_owner(bottle_id: &BottleId, account: &T::AccountId) -> dispatch::DispatchResult {
+	// pub fn validate_bottle_owner(bottle_id: &BottleId, account: &T::AccountId) -> dispatch::DispatchResult {
 		
-		registrar::Module::<T>::check_bottle_id_present(bottle_id)?;
+		// registrar::Module::<T>::check_bottle_id_present(bottle_id)?;
 		
-		let shipment_id: ShipmentId = match BottleOfShipment::get(bottle_id) {
-			None => Err(Error::<T>::BottleNotShipped),
-			Some(sp) => Ok(sp),
-		}?;
+		// let shipment_id: ShipmentId = match BottleOfShipment::get(bottle_id) {
+		// 	None => Err(Error::<T>::BottleNotShipped),
+		// 	Some(sp) => Ok(sp),
+		// }?;
 
-		match Shipments::<T>::get(&shipment_id) {
-			None => Err(Error::<T>::ShipmentDoesNotExist)?,
-			Some(sp) => match sp.status {
-				ShipmentStatus::Pending => Err(Error::<T>::ShipmentPending)?,
-				ShipmentStatus::InTransit => Err(Error::<T>::ShipmentInTransit)?,
-				ShipmentStatus::Delivered if sp.retailer == *account => Ok(()),
-				_ => Err(Error::<T>::NotBottleOwner)?,
-			}
-		}
-	}
+		// match Shipments::<T>::get(&shipment_id) {
+		// 	None => Err(Error::<T>::ShipmentDoesNotExist)?,
+		// 	Some(sp) => match sp.status {
+		// 		ShipmentStatus::Pending => Err(Error::<T>::ShipmentPending)?,
+		// 		ShipmentStatus::InTransit => Err(Error::<T>::ShipmentInTransit)?,
+		// 		ShipmentStatus::Delivered if sp.retailer == *account => Ok(()),
+		// 		_ => Err(Error::<T>::NotBottleOwner)?,
+		// 	}
+		// }
+
+
+	// }
 }
