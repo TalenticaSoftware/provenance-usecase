@@ -1,6 +1,6 @@
 use frame_support::{sp_runtime::RuntimeDebug, sp_std::prelude::*, sp_std::vec::Vec};
 use codec::{Encode, Decode};
-use registrar::{BottleId, BottleStatus};
+use registrar::BottleId;
 
 pub type ShipmentId = Vec<u8>;
 
@@ -40,16 +40,5 @@ impl<AccountId, Moment> Shipment<AccountId, Moment> {
         self.status = ShipmentStatus::Delivered;
         self.delivered = Some(when);
         self
-    }
-}
-
-
-impl From<ShipmentOperation> for BottleStatus {
-    fn from(op: ShipmentOperation) -> Self {
-        match op {
-            ShipmentOperation::Pickup => BottleStatus::ShipmentInTransit,
-            ShipmentOperation::Scan => BottleStatus::ShipmentInTransit,
-            ShipmentOperation::Deliver => BottleStatus::ShipmentDelivered,
-        }
     }
 }

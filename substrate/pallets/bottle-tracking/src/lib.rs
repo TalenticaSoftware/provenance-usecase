@@ -37,11 +37,14 @@ decl_storage! {
 	// This name may be updated, but each pallet in the runtime must use a unique name.
 	// ---------------------------------vvvvvvvvvvvvvv
 	trait Store for Module<T: Trait> as BottleTracking {
-		pub Shipments get(fn shipments): map hasher(blake2_128_concat) ShipmentId => Option<Shipment<T::AccountId, T::Moment>>;
-		pub ShipmentsOfManufacturer get(fn shipments_of_manufacturer): map hasher(blake2_128_concat) T::AccountId => Vec<ShipmentId>;
-		pub ShipmentsOfCarrier get(fn shipments_of_carrier): map hasher(blake2_128_concat) T::AccountId => Vec<ShipmentId>;
-		pub ShipmentsOfRetailer get(fn shipments_of_retailer): map hasher(blake2_128_concat) T::AccountId => Vec<ShipmentId>;
-		pub BottleOfShipment get(fn bottle_of_shipment): map hasher(blake2_128_concat) BottleId => Option<ShipmentId>;
+		pub Shipments: map hasher(blake2_128_concat) ShipmentId => Option<Shipment<T::AccountId, T::Moment>>;
+		pub ShipmentsOfManufacturer: map hasher(blake2_128_concat) T::AccountId => Vec<ShipmentId>;
+		pub ShipmentsOfCarrier: map hasher(blake2_128_concat) T::AccountId => Vec<ShipmentId>;
+		pub ShipmentsOfRetailer: map hasher(blake2_128_concat) T::AccountId => Vec<ShipmentId>;
+		pub BottleOfShipment: map hasher(blake2_128_concat) BottleId => Option<ShipmentId>;
+
+		pub BottlesOfCustomer: map hasher(blake2_128_concat) T::AccountId => Vec<BottleId>;
+		pub BottleSoldTo: map hasher(blake2_128_concat) BottleId => Option<T::AccountId>;
 	}
 }
 
@@ -74,6 +77,7 @@ decl_error! {
 		BottleNotShipped,
 		ShipmentPending,
 		NotBottleOwner,
+		BottleAlreadySold,
 	}
 }
 
@@ -122,7 +126,6 @@ decl_module! {
 
 			for bottle in &shipment.bottles {
 				BottleOfShipment::insert(&bottle, &id);
-				registrar::Module::<T>::update_bottle_owner(bottle, carrier.clone())?;
 			}
 
 			Shipments::<T>::insert(&id, shipment);
@@ -162,15 +165,7 @@ decl_module! {
 
 			shipment = match operation {
 				ShipmentOperation::Pickup => shipment.pickup(),
-				ShipmentOperation::Deliver => {
-					shipment = shipment.delivered(<timestamp::Module<T>>::now());
-
-					for bottle in &shipment.bottles {
-						registrar::Module::<T>::update_bottle_owner(bottle, shipment.retailer.clone())?;
-					}
-
-					shipment
-				},
+				ShipmentOperation::Deliver => shipment.delivered(<timestamp::Module<T>>::now()),
 				_ => shipment,
 			};
 
@@ -196,12 +191,13 @@ decl_module! {
 			registrar::Module::<T>::validate_customer(&customer)?;
 
 			for bottle in &bottles {
-				// Self::validate_bottle_owner(bottle, &who)?;
-				registrar::Module::<T>::check_bottle_owner(bottle, who.clone())?;
+				Self::is_bottle_sold(&bottle)?;
+				Self::validate_bottle_owner(bottle, &who)?;
 			}
 
 			for bottle in &bottles {
-				registrar::Module::<T>::update_bottle_owner(bottle, customer.clone())?;
+				BottlesOfCustomer::<T>::append(&customer, &bottle);
+				BottleSoldTo::<T>::insert(&bottle, &customer);
 			}
 
 			Self::deposit_event(RawEvent::BottlesSoldToCustomer(customer));
@@ -245,7 +241,7 @@ impl<T: Trait> Module<T> {
 
 		for bottle in bottles {
 			registrar::Module::<T>::check_bottle_id_present(&bottle)?;
-			registrar::Module::<T>::check_bottle_owner(&bottle, manufacturer.clone())?;
+			registrar::Module::<T>::check_bottle_manufacturer(&bottle, manufacturer)?;
 			ensure!(
 				!BottleOfShipment::contains_key(bottle.clone()), 
 				Error::<T>::BottleAlreadyShipped
@@ -255,26 +251,31 @@ impl<T: Trait> Module<T> {
         Ok(())
     }
 
+	pub fn is_bottle_sold(bottle_id: &BottleId) -> dispatch::DispatchResult{
+		match BottleSoldTo::<T>::get(bottle_id) {
+			None => Ok(()),
+			_ => Err(Error::<T>::BottleAlreadySold)?,
+		}
+	}
 
-	// pub fn validate_bottle_owner(bottle_id: &BottleId, account: &T::AccountId) -> dispatch::DispatchResult {
+
+	pub fn validate_bottle_owner(bottle_id: &BottleId, account: &T::AccountId) -> dispatch::DispatchResult {
 		
-		// registrar::Module::<T>::check_bottle_id_present(bottle_id)?;
+		registrar::Module::<T>::check_bottle_id_present(bottle_id)?;
 		
-		// let shipment_id: ShipmentId = match BottleOfShipment::get(bottle_id) {
-		// 	None => Err(Error::<T>::BottleNotShipped),
-		// 	Some(sp) => Ok(sp),
-		// }?;
+		let shipment_id: ShipmentId = match BottleOfShipment::get(bottle_id) {
+			None => Err(Error::<T>::BottleNotShipped),
+			Some(sp) => Ok(sp),
+		}?;
 
-		// match Shipments::<T>::get(&shipment_id) {
-		// 	None => Err(Error::<T>::ShipmentDoesNotExist)?,
-		// 	Some(sp) => match sp.status {
-		// 		ShipmentStatus::Pending => Err(Error::<T>::ShipmentPending)?,
-		// 		ShipmentStatus::InTransit => Err(Error::<T>::ShipmentInTransit)?,
-		// 		ShipmentStatus::Delivered if sp.retailer == *account => Ok(()),
-		// 		_ => Err(Error::<T>::NotBottleOwner)?,
-		// 	}
-		// }
-
-
-	// }
+		match Shipments::<T>::get(&shipment_id) {
+			None => Err(Error::<T>::ShipmentDoesNotExist)?,
+			Some(sp) => match sp.status {
+				ShipmentStatus::Pending => Err(Error::<T>::ShipmentPending)?,
+				ShipmentStatus::InTransit => Err(Error::<T>::ShipmentInTransit)?,
+				ShipmentStatus::Delivered if sp.retailer == *account => Ok(()),
+				_ => Err(Error::<T>::NotBottleOwner)?,
+			}
+		}
+	}
 }

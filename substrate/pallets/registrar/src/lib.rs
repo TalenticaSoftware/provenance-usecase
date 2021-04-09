@@ -23,37 +23,14 @@ pub enum MemberType {
 	Customer,
 }
 
-#[derive(Debug, PartialEq, Encode, Decode)]
-pub enum BottleStatus {
-	Manufactured,
-	ShipmentRegistered,
-	ShipmentInTransit,
-	ShipmentDelivered,
-	SoldToCustomer,
-}
-
-impl Default for BottleStatus {
-	fn default() -> Self {
-		BottleStatus::Manufactured
-	}
-}
-
 pub const BOTTLE_ID_MAX_LENGTH: usize = 36;
 pub type BottleId = Vec<u8>;
 
 #[derive(Debug, PartialEq, Encode, Decode)]
 pub struct Bottle<AccountId, Moment> {
 	id: BottleId,
-	owner: AccountId,
-	status: BottleStatus,
+	manufacturer: AccountId,
 	registered: Moment,
-}
-
-impl<AccountId, Moment> Bottle<AccountId, Moment> {
-	pub fn change_owner(mut self, new_owner: AccountId) -> Self {
-		self.owner = new_owner;
-		self
-	}
 }
 
 /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -272,11 +249,11 @@ impl<T: Trait> Module<T> {
 		Ok(())
 	}
 
-	// pub fn check_bottle_manufacturer(id: &[u8], account: &T::AccountId) -> dispatch::DispatchResult {
-	// 	ensure!(<ManufacturerOf::<T>>::get(id) == Some(account.clone()), Error::<T>::NotBottleManufacturer);
+	pub fn check_bottle_manufacturer(id: &[u8], account: &T::AccountId) -> dispatch::DispatchResult {
+		ensure!(<ManufacturerOf::<T>>::get(id) == Some(account.clone()), Error::<T>::NotBottleManufacturer);
 
-	// 	Ok(())
-	// }
+		Ok(())
+	}
 
 	pub fn validate_bottle_id(id: &[u8]) -> dispatch::DispatchResult {
 		ensure!(!id.is_empty(), Error::<T>::BottleIdMissing);
@@ -296,26 +273,6 @@ impl<T: Trait> Module<T> {
 	pub fn new_bottle() -> BottleBuilder<T::AccountId, T::Moment> {
         BottleBuilder::<T::AccountId, T::Moment>::default()
     }
-
-	pub fn update_bottle_owner(bottle_id: &BottleId, new_owner: T::AccountId) -> dispatch::DispatchResult {
-
-		let mut bottle: Bottle<T::AccountId, T::Moment> = match Bottles::<T>::get(bottle_id) {
-			None => Err(Error::<T>::BottleNotExist),
-			Some(bottle) => Ok(bottle),
-		}?;
-
-		bottle = bottle.change_owner(new_owner);
-
-		Bottles::<T>::insert(bottle_id, bottle);
-
-		Ok(())
-	}
-
-	pub fn check_bottle_owner(id: &[u8], owner: T::AccountId) -> dispatch::DispatchResult {
-		ensure!(<ManufacturerOf::<T>>::get(id) == Some(owner), Error::<T>::NotBottleOwner);
-
-		Ok(())
-	}
 }
 
 
@@ -326,9 +283,8 @@ where
     Moment: Default,
 {
     id: BottleId,
-    owner: AccountId,
-	status: BottleStatus,
-    registered: Moment,
+    manufacturer: AccountId,
+	registered: Moment,
 }
 
 impl<AccountId, Moment> BottleBuilder<AccountId, Moment>
@@ -342,7 +298,7 @@ where
     }
 
     pub fn manufactured_by(mut self, manufacturer: AccountId) -> Self {
-        self.owner = manufacturer;
+        self.manufacturer = manufacturer;
         self
     }
 
@@ -354,9 +310,8 @@ where
     pub fn build(self) -> Bottle<AccountId, Moment> {
         Bottle::<AccountId, Moment> {
             id: self.id,
-            owner: self.owner,
-            registered: self.registered,
-			status: BottleStatus::Manufactured,
+            manufacturer: self.manufacturer,
+            registered: self.registered
         }
     }
 }
