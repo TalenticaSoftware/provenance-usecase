@@ -20,9 +20,9 @@ Use this command to start the substrate node.
 
 ## Type definitions for Polkadot JS Portal
 
-For connecting the local substrate node to the [Polkadot JS Portal](https://portal.chain.centrifuge.io/#/explorer), click on the top-left corner of the portal and use the ws://localhost:9944 address.
+To connect the local substrate node with the [Polkadot JS Portal](https://portal.chain.centrifuge.io/#/explorer), click on the top-left corner of the portal and select DEVELOPMENT -> Local Node.
 
-Type definations: 
+Use these type definitions at Settings -> Developer: 
 
 ```json
 
